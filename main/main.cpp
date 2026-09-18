@@ -40,9 +40,43 @@ public:
         std::cout << "Memory Pool destroyed.\n";
     }
     
+    //Allocate Method
     void* allocate(size_t size){
-        //Allocator logic
+        if (size == 0) return nullptr;
+
+        BlockHeader* current = head;
+
+        while (current != nullptr){
+            if (current->isFree && current->size >= size){
+                if (current->size >= size + sizeof(BlockHeader) + 1){
+                    char* newBlockAddress = reinterpret_cast<char*>(current) + sizeof(BlockHeader) + size;
+                    BlockHeader* newBlock = reinterpret_cast <BlockHeader*>(newBlockAddress);
+
+                    newBlock->size = current->size - size - sizeof(BlockHeader);
+                    newBlock->isFree = true;
+
+                    newBlock->next = current->next;
+                    newBlock->prev = current;
+
+                    if (newBlock->next != nullptr){
+                        newBlock->next->prev = newBlock;
+                    }
+
+                    current->size = size;
+                    current->next = newBlock;
+                }
+
+                current->isFree = false;
+                return static_cast<void*>(current + 1);
+            }
+
+            current = current->next;
+        }
+
+        std::cout << "Allocation Failed: Out of memory or fragmentation is too high.\n";
+        return nullptr;
     }
+
 
     void deallocate(void* ptr){
         //Deallocator logic
