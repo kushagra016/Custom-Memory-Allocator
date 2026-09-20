@@ -77,13 +77,34 @@ public:
         return nullptr;
     }
 
-    void deallocate(void* ptr){
-        //Deallocator logic
+     void deallocate(void* ptr){
+        if (ptr == nullptr) return;
+
+        BlockHeader* current = static_cast<BlockHeader*>(ptr) - 1;
+
+        current->isFree = true;
+
+        if (current->next != nullptr && current->next->isFree){
+            current->size += sizeof(BlockHeader) + current->next->size;
+
+            current->next = current->next->next;
+
+            if (current->next != nullptr){
+                current->next->prev = current;
+            }
+        }
+
+        if (current->prev != nullptr && current->prev->isFree){
+            current->prev->size += sizeof(BlockHeader) + current->size;
+
+            current->prev->next = current->next;
+
+            if (current->next != nullptr){
+                current->next->prev = current->prev;
+            }
+        }
     }
 
-    void printMemoryMap(){
-        //Visualizer logic
-    }
 };
 
 int main() {
