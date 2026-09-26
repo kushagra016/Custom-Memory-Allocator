@@ -78,7 +78,7 @@ public:
     }
 
     //Deallocate Method
-     void deallocate(void* ptr){
+    void deallocate(void* ptr){
         if (ptr == nullptr) return;
 
         BlockHeader* current = static_cast<BlockHeader*>(ptr) - 1;
@@ -144,7 +144,26 @@ public:
 };
 
 int main() {
-    MemoryAllocator myAllocator(1048576); //Allocating 1 MegaByte
+    MemoryAllocator allocator(1024);
+    allocator.printMemoryMap();
+
+    std::cout << "\n>>> ACTION: Allocating 3 chunks of memory...\n";
+    void* ptr1 = allocator.allocate(100);
+    void* ptr2 = allocator.allocate(200);
+    void* ptr3 = allocator.allocate(50);
+    allocator.printMemoryMap();
+
+    std::cout << "\n>>> ACTION: Freeing middle chunk (ptr2)...\n";
+    allocator.deallocate(ptr2);
+    allocator.printMemoryMap();
+
+    std::cout << "\n>>> ACTION: Freeing first chunk (ptr1)...\n";
+    allocator.deallocate(ptr1);
+    allocator.printMemoryMap();
+
+    std::cout << "\n>>> ACTION: Freeing last chunk (ptr3)...\n";
+    allocator.deallocate(ptr3);
+    allocator.printMemoryMap();
     
     return 0;
 }
