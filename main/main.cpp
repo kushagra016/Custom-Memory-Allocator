@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstddef>
+#include <string>
 
 //BlockHeader
 struct BlockHeader {
@@ -7,6 +8,12 @@ struct BlockHeader {
     bool isFree;
     BlockHeader* next;
     BlockHeader* prev;
+};
+
+enum class AllocationStrategy {
+    FIRST_FIT,
+    BEST_FIT,
+    WORST_FIT
 };
 
 //Memory Allocator Class
@@ -41,42 +48,61 @@ public:
     }
     
     //Allocation Method
-    void* allocate(size_t size){
-        if (size == 0) return nullptr;
-
-        BlockHeader* current = head;
-
-        while (current != nullptr){
-            if (current->isFree && current->size >= size){
-                if (current->size >= size + sizeof(BlockHeader) + 1){
-                    char* newBlockAddress = reinterpret_cast<char*>(current) + sizeof(BlockHeader) + size;
-                    BlockHeader* newBlock = reinterpret_cast <BlockHeader*>(newBlockAddress);
-
-                    newBlock->size = current->size - size - sizeof(BlockHeader);
-                    newBlock->isFree = true;
-
-                    newBlock->next = current->next;
-                    newBlock->prev = current;
-
-                    if (newBlock->next != nullptr){
-                        newBlock->next->prev = newBlock;
-                    }
-
-                    current->size = size;
-                    current->next = newBlock;
-                }
-
-                current->isFree = false;
-                return static_cast<void*>(current + 1);
-            }
-
-            current = current->next;
+    void *allocate(size_t size, AllocationStrategy strategy = AllocationStrategy::FIRST_FIT) {
+        if (size == 0) {
+            return nullptr;
         }
 
-        std::cout << "Allocation Failed: Out of memory or fragmentation is too high.\n";
-        return nullptr;
-    }
+        BlockHeader *current = head;
+        BlockHeader *selectedBlock = nullptr;
 
+        if (strategy == AllocationStrategy::FIRST_FIT) {
+            while (current != nullptr) {
+                if (current->isFree && current->size >= size) {
+                    selectedBlock = current;
+                    break;
+                }
+                current = current->next;
+            }
+        }
+        else if (strategy == AllocationStrategy::BEST_FIT) {
+            //Best Fit Logic
+        }
+
+        else if (strategy == AllocationStrategy::WORST_FIT) {
+            //Worst Fit Logic
+        }
+
+        if (selectedBlock == nullptr) {
+            std::cout << "Allocation Failed: Out of memory or fragmentation is too high.\n";
+            return nullptr;
+        }
+
+        //Coalescing Logic
+        if (selectedBlock->size >= size + sizeof(BlockHeader) + 1) {
+
+            char *newBlockAddress = reinterpret_cast<char *>(selectedBlock) + sizeof(BlockHeader) + size;
+            BlockHeader *newBlock = reinterpret_cast<BlockHeader *>(newBlockAddress);
+
+            newBlock->size = selectedBlock->size - size - sizeof(BlockHeader);
+            newBlock->isFree = true;
+
+            newBlock->next = selectedBlock->next;
+            newBlock->prev = selectedBlock;
+
+            if (newBlock->next != nullptr) {
+                newBlock->next->prev = newBlock;
+            }
+
+            selectedBlock->size = size;
+            selectedBlock->next = newBlock;
+        }
+
+        selectedBlock->isFree = false;
+
+        return static_cast<void *>(selectedBlock + 1);
+    }
+    
     //Deallocate Method
     void deallocate(void* ptr){
         if (ptr == nullptr) return;
