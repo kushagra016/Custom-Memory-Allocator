@@ -66,11 +66,25 @@ public:
             }
         }
         else if (strategy == AllocationStrategy::BEST_FIT) {
-            //Best Fit Logic
+            while (current != nullptr) {
+                if (current->isFree && current->size >= size) {
+                    if (selectedBlock == nullptr || current->size < selectedBlock->size) {
+                        selectedBlock = current;
+                    }
+                }
+                current = current->next;
+            }
         }
 
         else if (strategy == AllocationStrategy::WORST_FIT) {
-            //Worst Fit Logic
+            while (current != nullptr) {
+                if (current->isFree && current->size >= size) {
+                    if (selectedBlock == nullptr || current->size > selectedBlock->size) {
+                        selectedBlock = current;
+                    }
+                }
+                current = current->next;
+            }
         }
 
         if (selectedBlock == nullptr) {
