@@ -1,6 +1,10 @@
 #include <iostream>
 #include <cstddef>
 #include <string>
+#include <vector>
+#include <sstream>
+#include <iomanip>
+#include <algorithm>
 
 //BlockHeader
 struct BlockHeader {
@@ -16,29 +20,47 @@ enum class AllocationStrategy {
     WORST_FIT
 };
 
+size_t convertToBytes(double value, std::string unit) {
+    if (unit == "KB") return static_cast<size_t>(value * 1024);
+    if (unit == "MB") return static_cast<size_t>(value * 1024 * 1024);
+    if (unit == "GB") return static_cast<size_t>(value * 1024 * 1024 * 1024);
+    return static_cast<size_t>(value);
+}
+
+double convertFromBytes(size_t bytes, std::string unit) {
+    if (unit == "KB") return static_cast<double>(bytes) / 1024.0;
+    if (unit == "MB") return static_cast<double>(bytes) / (1024.0 * 1024.0);
+    if (unit == "GB") return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+    return static_cast<double>(bytes);
+}
+
+struct AllocationRecord {
+    void* firstFitPtr;
+    void* bestFitPtr;
+    void* worstFitPtr;
+    double requestedValue;
+};
+
 //Memory Allocator Class
 class MemoryAllocator {
 private:
     void* memoryPool;
     size_t totalSize;
     BlockHeader* head;
+    std::string strategyName;
 
 public:
     //Constructor to allocate massive chunks of memory upfront
-    MemoryAllocator(size_t size){
+    MemoryAllocator(size_t size, std::string name){
         totalSize = size;
-
+        strategyName = name;
         memoryPool = ::operator new(totalSize);
-
         head = static_cast<BlockHeader*>(memoryPool);
 
         head->size = totalSize - sizeof(BlockHeader);
         head->isFree = true;
         head->next = nullptr;
         head->prev = nullptr;
-
-        std::cout << "Allocated Memory Pool of " << totalSize << " bytes.\n";
-        std::cout << "Overhead per block (Header Size): " << sizeof(BlockHeader) << " bytes.\n";
     }
 
     //Deconstructor to return the massive chunk to OS
@@ -48,7 +70,7 @@ public:
     }
     
     //Allocation Method
-    void *allocate(size_t size, AllocationStrategy strategy = AllocationStrategy::FIRST_FIT) {
+    void *allocate(size_t size, AllocationStrategy strategy) {
         if (size == 0) {
             return nullptr;
         }
@@ -146,6 +168,39 @@ public:
         }
     }
 
+    void* getPointerFromBlockId(int targetId) {
+        BlockHeader* current = head;
+        int currentId = 1; 
+        while (current != nullptr) {
+            if (currentId == targetId) {
+                if (current->isFree) return nullptr; 
+                return static_cast<void*>(current + 1);
+            }
+            currentId++;
+            current = current->next;
+        }
+        return nullptr;
+    }
+
+    void printActiveBlockIds() {
+        BlockHeader *current = head;
+        int id = 1; 
+        bool hasActive = false;
+        std::cout << "Currently active Block IDs: ";
+        
+        while (current != nullptr) {
+            if (!current->isFree) {
+                std::cout << id << " ";
+                hasActive = true;
+            }
+            id++;
+            current = current->next;
+        }
+        
+        if (!hasActive) std::cout << "None";
+        std::cout << "\n";
+    }
+
     //MemoryMap Method
     void printMemoryMap(){
         BlockHeader* current = head;
@@ -188,7 +243,7 @@ void runSimulation(AllocationStrategy strategy, std::string strategyName) {
     std::cout << ">>> RUNNING STRATEGY: " << strategyName << " <<<\n";
     std::cout << "========================================================\n";
 
-    MemoryAllocator allocator(1024);
+    MemoryAllocator allocator(1024, strategyName);
 
     void *p1 = allocator.allocate(200, strategy);
     void *p2 = allocator.allocate(50, strategy);
