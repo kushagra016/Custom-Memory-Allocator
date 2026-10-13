@@ -202,41 +202,87 @@ public:
     }
 
     //MemoryMap Method
-    void printMemoryMap(){
-        BlockHeader* current = head;
-        std:: cout << "\n=== Current Memory Map ===\n";
+    void printMemoryMap(std::string unit) {
+        BlockHeader *current = head;
+        std::cout << "\n=== " << strategyName << " Map (" << unit << ") ===\n";
 
-        int blockCount = 0;
-        size_t totalFree = 0;
-        size_t totalUsed = 0;
+        int id = 1; 
+        size_t totalFreeBytes = 0;
+        size_t totalUsedBytes = 0;
 
-        while (current != nullptr){
-            std::cout << "[";
-            if (current->isFree){
+        while (current != nullptr) {
+            std::cout << "[ID: " << id << " | ";
+            if (current->isFree) {
                 std::cout << "FREE";
-                totalFree += current->size;
-            }
-            else {
+                totalFreeBytes += current->size;
+            } else {
                 std::cout << "USED";
-                totalUsed += current->size;
+                totalUsedBytes += current->size;
             }
-            std::cout << ": " << current->size << "B] ";
+            
+            double displaySize = convertFromBytes(current->size, unit);
+            std::cout << ": " << std::fixed << std::setprecision(2) << displaySize << " " << unit << "] ";
 
-            if (current->next != nullptr){
-                std::cout << "->";
+            if (current->next != nullptr) {
+                std::cout << "-> ";
             }
 
+            id++;
+            current = current->next;
+        }
+
+        std::cout << "\n\nBlocks: " << (id - 1)
+                  << " | Used: " << std::fixed << std::setprecision(2) << convertFromBytes(totalUsedBytes, unit) << " " << unit
+                  << " | Free: " << std::fixed << std::setprecision(2) << convertFromBytes(totalFreeBytes, unit) << " " << unit << "\n";
+    }
+
+    
+    //Summary Table Method
+    void printSummaryTable(std::string unit) {
+        BlockHeader *current = head;
+        int blockCount = 0;
+        size_t totalFreeBytes = 0;
+        size_t totalUsedBytes = 0;
+
+        while (current != nullptr) {
+            if (current->isFree) {
+                totalFreeBytes += current->size;
+            } else {
+                totalUsedBytes += current->size;
+            }
             blockCount++;
             current = current->next;
         }
 
-        std::cout << "\nBlocks: " << blockCount
-                  << " | Used Data: " << totalUsed << "B"
-                  << " | Free Space: " << totalFree << "B\n";
-        std::cout << "===========================\n";
+        std::cout << "+-------------------------------------------------+\n";
+        std::cout << "| " << std::left << std::setw(47) << (strategyName + " SUMMARY") << " |\n";
+        std::cout << "+-------------------------------------------------+\n";
+        std::cout << std::fixed << std::setprecision(2);
+        
+        std::cout << "| Total Pool Size:       " 
+                  << std::right << std::setw(17) << convertFromBytes(totalSize, unit) 
+                  << " " << std::left << std::setw(7) << unit 
+                  << std::right << "|\n";
+                  
+        std::cout << "| Total Used Memory:     " 
+                  << std::right << std::setw(17) << convertFromBytes(totalUsedBytes, unit) 
+                  << " " << std::left << std::setw(7) << unit 
+                  << std::right << "|\n";
+                  
+        std::cout << "| Total Free Memory:     " 
+                  << std::right << std::setw(17) << convertFromBytes(totalFreeBytes, unit) 
+                  << " " << std::left << std::setw(7) << unit 
+                  << std::right << "|\n";
+                  
+        std::cout << "| Total Blocks:          " 
+                  << std::right << std::setw(17) << blockCount 
+                  << " " << std::left << std::setw(7) << " " 
+                  << std::right << "|\n";
+                  
+        std::cout << "+-------------------------------------------------+\n\n";
     }
-
 };
+
 
 void runSimulation(AllocationStrategy strategy, std::string strategyName) {
     std::cout << "\n======================================================\n";
@@ -257,13 +303,13 @@ void runSimulation(AllocationStrategy strategy, std::string strategyName) {
 
     std::cout << "\n--- Before Test Allocation ---\n";
     std::cout << "Available Holes: 200B (First), 150B (Smallest), 300B (Largest)\n";
-    allocator.printMemoryMap();
+    allocator.printMemoryMap("KB");
 
     std::cout << "\n>>> ACTION: Allocating 100 bytes...\n";
     void *testPtr = allocator.allocate(100, strategy);
 
     std::cout << "\n--- After Test Allocation ---\n";
-    allocator.printMemoryMap();
+    allocator.printMemoryMap("KB");
 }
 
 
