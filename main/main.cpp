@@ -283,42 +283,138 @@ public:
     }
 };
 
-
-void runSimulation(AllocationStrategy strategy, std::string strategyName) {
-    std::cout << "\n======================================================\n";
-    std::cout << ">>> RUNNING STRATEGY: " << strategyName << " <<<\n";
-    std::cout << "========================================================\n";
-
-    MemoryAllocator allocator(1024, strategyName);
-
-    void *p1 = allocator.allocate(200, strategy);
-    void *p2 = allocator.allocate(50, strategy);
-    void *p3 = allocator.allocate(150, strategy);
-    void *p4 = allocator.allocate(50, strategy);
-    void *p5 = allocator.allocate(300, strategy);
-
-    allocator.deallocate(p1); 
-    allocator.deallocate(p3); 
-    allocator.deallocate(p5); 
-
-    std::cout << "\n--- Before Test Allocation ---\n";
-    std::cout << "Available Holes: 200B (First), 150B (Smallest), 300B (Largest)\n";
-    allocator.printMemoryMap("KB");
-
-    std::cout << "\n>>> ACTION: Allocating 100 bytes...\n";
-    void *testPtr = allocator.allocate(100, strategy);
-
-    std::cout << "\n--- After Test Allocation ---\n";
-    allocator.printMemoryMap("KB");
-}
-
-
 int main() {
-    std::cout << "============== Allocation Strategy Comparison ==============\n";
+    std::cout << "Initializing Custom Memory Allocator...\n";
+    
+    size_t poolSize = 10 * 1024 * 1024;
+    MemoryAllocator allocFirst(poolSize, "FIRST-FIT STRATEGY");
+    MemoryAllocator allocBest(poolSize, "BEST-FIT STRATEGY");
+    MemoryAllocator allocWorst(poolSize, "WORST-FIT STRATEGY");
 
-    runSimulation(AllocationStrategy::FIRST_FIT, "FIRST-FIT STRATEGY");
-    runSimulation(AllocationStrategy::BEST_FIT, "BEST-FIT STRATEGY");
-    runSimulation(AllocationStrategy::WORST_FIT, "WORST-FIT STRATEGY");
+    std::string globalUnit;
+    std::cout << "\nBefore we start, select your preferred operating unit (B, KB, MB, GB): ";
+    std::cin >> globalUnit;
+    
+    for (char &c : globalUnit) c = toupper(c);
+    if (globalUnit != "B" && globalUnit != "KB" && globalUnit != "MB" && globalUnit != "GB") {
+        globalUnit = "B";
+    }
+
+    int stratChoice = 0;
+    std::cout << "Select your primary Allocation Strategy:\n";
+    std::cout << "1. First-Fit\n2. Best-Fit\n3. Worst-Fit\n";
+    std::cout << "Enter choice (1-3): ";
+    std::cin >> stratChoice;
+
+    MemoryAllocator* primaryAlloc = &allocFirst;
+    if (stratChoice == 2) primaryAlloc = &allocBest;
+    else if (stratChoice == 3) primaryAlloc = &allocWorst;
+    
+    std::cout << "\n-------------------------------------------------\n";
+    std::cout << "Allocated Memory Pool of " << std::fixed << std::setprecision(2) 
+              << convertFromBytes(poolSize, globalUnit) << " " << globalUnit 
+              << " upfront from the OS.\n";
+    std::cout << "-------------------------------------------------\n";
+
+    std::vector<AllocationRecord> allocatedPointers; 
+
+    int choice = 0;
+    while (choice != 5) {
+        std::cout << "\n--- Custom Memory Allocator Menu ---\n";
+        std::cout << "1. Allocate Memory\n";
+        std::cout << "2. Deallocate Memory\n";
+        std::cout << "3. Display Memory Map\n";
+        std::cout << "4. Compare All Strategies\n";
+        std::cout << "5. Exit and Show Summary\n";
+        std::cout << "Enter your choice: ";
+        
+        if (!(std::cin >> choice)) {
+            std::cin.clear();
+            std::cin.ignore(10000, '\n');
+            continue;
+        }
+
+        switch (choice) {
+            case 1: {
+                double val;
+                std::cout << "Enter amount to allocate (in " << globalUnit << "): ";
+                std::cin >> val;
+
+                size_t requestedBytes = convertToBytes(val, globalUnit);
+                
+                void* ptrF = allocFirst.allocate(requestedBytes, AllocationStrategy::FIRST_FIT);
+                void* ptrB = allocBest.allocate(requestedBytes, AllocationStrategy::BEST_FIT);
+                void* ptrW = allocWorst.allocate(requestedBytes, AllocationStrategy::WORST_FIT);
+                
+                if (ptrF && ptrB && ptrW) {
+                    allocatedPointers.push_back({ptrF, ptrB, ptrW, val});
+                    std::cout << "Successfully allocated " << val << " " << globalUnit << ".\n";
+                } else {
+                    std::cout << "Allocation failed due to fragmentation.\n";
+                    if (ptrF) allocFirst.deallocate(ptrF);
+                    if (ptrB) allocBest.deallocate(ptrB);
+                    if (ptrW) allocWorst.deallocate(ptrW);
+                }
+                break;
+            }
+            case 2: {
+                if (allocatedPointers.empty()) {
+                    std::cout << "No blocks currently allocated to free.\n";
+                    break;
+                }
+                
+                std::cout << "\n";
+                primaryAlloc->printActiveBlockIds();
+                
+                std::cout << "Enter the Block ID to deallocate: ";
+                int id;
+                std::cin >> id;
+
+                void* primaryPtr = primaryAlloc->getPointerFromBlockId(id);
+                
+                if (primaryPtr) {
+                    auto it = std::find_if(allocatedPointers.begin(), allocatedPointers.end(),
+                        [&](const AllocationRecord& rec) {
+                            if (stratChoice == 1) return rec.firstFitPtr == primaryPtr;
+                            if (stratChoice == 2) return rec.bestFitPtr == primaryPtr;
+                            return rec.worstFitPtr == primaryPtr;
+                        });
+
+                    if (it != allocatedPointers.end()) {
+                        allocFirst.deallocate(it->firstFitPtr);
+                        allocBest.deallocate(it->bestFitPtr);
+                        allocWorst.deallocate(it->worstFitPtr);
+                        
+                        allocatedPointers.erase(it);
+                        std::cout << "\nBlock " << id << " successfully deallocated.\n";
+                    }
+                } else {
+                    std::cout << "Invalid Block ID or Block is already FREE.\n";
+                }
+                break;
+            }
+            case 3:
+                primaryAlloc->printMemoryMap(globalUnit);
+                break;
+            case 4:
+                std::cout << "\n========================================================\n";
+                std::cout << "             STRATEGY COMPARISON VISUALIZER               \n";
+                std::cout << "========================================================";
+                allocFirst.printMemoryMap(globalUnit);
+                std::cout << "\n--------------------------------------------------------";
+                allocBest.printMemoryMap(globalUnit);
+                std::cout << "\n--------------------------------------------------------";
+                allocWorst.printMemoryMap(globalUnit);
+                std::cout << "\n========================================================\n";
+                break;
+            case 5:
+                std::cout << "\nExiting System. Generating Final Summary...\n\n";
+                primaryAlloc->printSummaryTable(globalUnit);
+                break;
+            default:
+                std::cout << "Invalid choice. Please select an option from 1 to 5.\n";
+        }
+    }
 
     return 0;
 }
