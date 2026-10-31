@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <mutex>
 
 //BlockHeader
 struct BlockHeader {
@@ -48,6 +49,7 @@ private:
     size_t totalSize;
     BlockHeader* head;
     std::string strategyName;
+    std::mutex arenaMutex;
 
 public:
     //Constructor to allocate massive chunks of memory upfront
@@ -71,6 +73,8 @@ public:
     
     //Allocation Method
     void *allocate(size_t size, AllocationStrategy strategy) {
+        std::lock_guard<std::mutex> lock(arenaMutex);
+
         if (size == 0) {
             return nullptr;
         }
@@ -143,6 +147,8 @@ public:
     void deallocate(void* ptr){
         if (ptr == nullptr) return;
 
+        std::lock_guard<std::mutex> lock(arenaMutex);
+
         BlockHeader* current = static_cast<BlockHeader*>(ptr) - 1;
 
         current->isFree = true;
@@ -183,6 +189,8 @@ public:
     }
 
     void printActiveBlockIds() {
+        std::lock_guard<std::mutex> lock(arenaMutex);
+
         BlockHeader *current = head;
         int id = 1; 
         bool hasActive = false;
@@ -203,6 +211,8 @@ public:
 
     //MemoryMap Method
     void printMemoryMap(std::string unit) {
+        std::lock_guard<std::mutex> lock(arenaMutex);
+
         BlockHeader *current = head;
         std::cout << "\n=== " << strategyName << " Map (" << unit << ") ===\n";
 
@@ -239,6 +249,8 @@ public:
     
     //Summary Table Method
     void printSummaryTable(std::string unit) {
+        std::lock_guard<std::mutex> lock(arenaMutex);
+        
         BlockHeader *current = head;
         int blockCount = 0;
         size_t totalFreeBytes = 0;
