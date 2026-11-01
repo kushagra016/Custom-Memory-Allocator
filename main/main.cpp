@@ -8,8 +8,10 @@
 #include <mutex>
 
 //BlockHeader
-struct BlockHeader {
+struct BlockHeader 
+{
     size_t size;
+    size_t requestedSize;
     bool isFree;
     BlockHeader* next;
     BlockHeader* prev;
@@ -61,6 +63,7 @@ public:
 
         head->size = totalSize - sizeof(BlockHeader);
         head->isFree = true;
+        head->requestedSize = 0;
         head->next = nullptr;
         head->prev = nullptr;
     }
@@ -139,6 +142,7 @@ public:
         }
 
         selectedBlock->isFree = false;
+        selectedBlock->requestedSize = size;
 
         return static_cast<void *>(selectedBlock + 1);
     }
