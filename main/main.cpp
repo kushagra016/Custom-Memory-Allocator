@@ -299,6 +299,19 @@ public:
     }
 };
 
+MemoryAllocator* globalAllocator = nullptr;
+AllocationStrategy globalStrategy = AllocationStrategy::FIRST_FIT;
+
+struct DataBlock {
+    void* operator new(size_t size) {
+        return globalAllocator->allocate(size, globalStrategy);
+    }
+    
+    void operator delete(void* ptr) {
+        globalAllocator->deallocate(ptr);
+    }
+};
+
 int main() {
     std::cout << "Initializing Custom Memory Allocator...\n";
     
@@ -358,18 +371,26 @@ int main() {
 
                 size_t requestedBytes = convertToBytes(val, globalUnit);
                 
-                void* ptrF = allocFirst.allocate(requestedBytes, AllocationStrategy::FIRST_FIT);
-                void* ptrB = allocBest.allocate(requestedBytes, AllocationStrategy::BEST_FIT);
-                void* ptrW = allocWorst.allocate(requestedBytes, AllocationStrategy::WORST_FIT);
+                globalAllocator = &allocFirst;
+                globalStrategy = AllocationStrategy::FIRST_FIT;
+                void* ptrF = DataBlock::operator new(requestedBytes);
+                
+                globalAllocator = &allocBest;
+                globalStrategy = AllocationStrategy::BEST_FIT;
+                void* ptrB = DataBlock::operator new(requestedBytes);
+                
+                globalAllocator = &allocWorst;
+                globalStrategy = AllocationStrategy::WORST_FIT;
+                void* ptrW = DataBlock::operator new(requestedBytes);
                 
                 if (ptrF && ptrB && ptrW) {
                     allocatedPointers.push_back({ptrF, ptrB, ptrW, val});
                     std::cout << "Successfully allocated " << val << " " << globalUnit << ".\n";
                 } else {
                     std::cout << "Allocation failed due to fragmentation.\n";
-                    if (ptrF) allocFirst.deallocate(ptrF);
-                    if (ptrB) allocBest.deallocate(ptrB);
-                    if (ptrW) allocWorst.deallocate(ptrW);
+                    if (ptrF) { globalAllocator = &allocFirst; DataBlock::operator delete(ptrF); }
+                    if (ptrB) { globalAllocator = &allocBest; DataBlock::operator delete(ptrB); }
+                    if (ptrW) { globalAllocator = &allocWorst; DataBlock::operator delete(ptrW); }
                 }
                 break;
             }
@@ -397,9 +418,18 @@ int main() {
                         });
 
                     if (it != allocatedPointers.end()) {
-                        allocFirst.deallocate(it->firstFitPtr);
-                        allocBest.deallocate(it->bestFitPtr);
-                        allocWorst.deallocate(it->worstFitPtr);
+                        globalAllocator = &allocFirst;
+                        DataBlock::operator delete(it->firstFitPtr);
+                        
+                        globalAllocator = &allocBest;
+                        DataBlock::operator delete(it->bestFitPtr);
+                        
+                        globalAllocator = &allocWorst;
+                        DataBlock::operator delete(it->worstFitPtr);
+                        
+                        allocatedPointers.erase(it);
+                        std::cout << "\nBlock " << id << " successfully deallocated.\n";
+                    }
                         
                         allocatedPointers.erase(it);
                         std::cout << "\nBlock " << id << " successfully deallocated.\n";
