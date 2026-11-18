@@ -5,11 +5,13 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
-#include <mutex>
+#include <mutex
+#include <chrono>
+
+bool suppressOutput = false;
 
 //BlockHeader
-struct BlockHeader 
-{
+struct BlockHeader {
     size_t size;
     size_t requestedSize;
     bool isFree;
@@ -50,6 +52,7 @@ private:
     void* memoryPool;
     size_t totalSize;
     BlockHeader* head;
+    BlockHeader *firstFreeBlock;
     std::string strategyName;
     std::mutex arenaMutex;
 
@@ -66,6 +69,8 @@ public:
         head->requestedSize = 0;
         head->next = nullptr;
         head->prev = nullptr;
+
+        firstFreeBlock = head;
     }
 
     //Deconstructor to return the massive chunk to OS
@@ -82,7 +87,7 @@ public:
             return nullptr;
         }
 
-        BlockHeader *current = head;
+        BlockHeader *current = (strategy == AllocationStrategy::FIRST_FIT) ? firstFreeBlock : head; //
         BlockHeader *selectedBlock = nullptr;
 
         if (strategy == AllocationStrategy::FIRST_FIT) {
@@ -144,6 +149,14 @@ public:
         selectedBlock->isFree = false;
         selectedBlock->requestedSize = size;
 
+        if (selectedBlock == firstFreeBlock) {          
+            BlockHeader* temp = firstFreeBlock->next;
+            while (temp != nullptr && !temp->isFree) {
+                temp = temp->next;
+            }
+            firstFreeBlock = temp;
+        }
+
         return static_cast<void *>(selectedBlock + 1);
     }
     
@@ -175,6 +188,12 @@ public:
             if (current->next != nullptr){
                 current->next->prev = current->prev;
             }
+
+            current = current->prev;
+        }
+
+        if (firstFreeBlock == nullptr || current < firstFreeBlock) {   
+            firstFreeBlock = current;
         }
     }
 
@@ -312,6 +331,12 @@ struct DataBlock {
     }
 };
 
+struct StandardNode {  
+    char byte;
+    StandardNode() {}
+    ~StandardNode() {}
+};
+
 int main() {
     std::cout << "Initializing Custom Memory Allocator...\n";
     
@@ -348,13 +373,14 @@ int main() {
     std::vector<AllocationRecord> allocatedPointers; 
 
     int choice = 0;
-    while (choice != 5) {
+    while (choice != 6) {
         std::cout << "\n--- Custom Memory Allocator Menu ---\n";
         std::cout << "1. Allocate Memory\n";
         std::cout << "2. Deallocate Memory\n";
         std::cout << "3. Display Memory Map\n";
         std::cout << "4. Compare All Strategies\n";
-        std::cout << "5. Exit and Show Summary\n";
+        std::cout << "5. Run STL Performance Benchmark\n";
+        std::cout << "6. Exit and Show Summary\n";
         std::cout << "Enter your choice: ";
         
         if (!(std::cin >> choice)) {
@@ -453,7 +479,58 @@ int main() {
                 allocWorst.printMemoryMap(globalUnit);
                 std::cout << "\n========================================================\n";
                 break;
-            case 5:
+            case 5: {              // 
+                std::cout << "\n--- STL Benchmarking Suite ---\n";
+                const int NUM_NODES = 10000;
+                std::cout << "Allocating and freeing " << NUM_NODES << " blocks...\n";
+
+                auto startOS = std::chrono::high_resolution_clock::now();
+                std::vector<StandardNode*> stdNodes(NUM_NODES);
+                
+                for (int i = 0; i < NUM_NODES; i++) {
+                    stdNodes[i] = new StandardNode();
+                }
+                for (int i = 0; i < NUM_NODES; i++) {
+                    delete stdNodes[i];
+                }
+                
+                auto endOS = std::chrono::high_resolution_clock::now();
+                auto durationOS = std::chrono::duration_cast<std::chrono::microseconds>(endOS - startOS).count();
+
+                globalAllocator = primaryAlloc;
+                globalStrategy = (stratChoice == 1) ? AllocationStrategy::FIRST_FIT : 
+                                 (stratChoice == 2) ? AllocationStrategy::BEST_FIT : AllocationStrategy::WORST_FIT;
+                
+                suppressOutput = true; 
+
+                auto startCustom = std::chrono::high_resolution_clock::now();
+                std::vector<DataBlock*> customNodes(NUM_NODES);
+                
+                for (int i = 0; i < NUM_NODES; i++) {
+                    customNodes[i] = static_cast<DataBlock*>(DataBlock::operator new(1));
+                }
+                for (int i = 0; i < NUM_NODES; i++) {
+                    DataBlock::operator delete(customNodes[i]);
+                }
+                
+                auto endCustom = std::chrono::high_resolution_clock::now();
+                auto durationCustom = std::chrono::duration_cast<std::chrono::microseconds>(endCustom - startCustom).count();
+
+                suppressOutput = false; 
+
+                std::cout << "\n[RESULTS]\n";
+                std::cout << "Standard OS (new/delete): " << durationOS << " microseconds\n";
+                std::cout << "Custom Allocator Engine:  " << durationCustom << " microseconds\n\n";
+                
+                if (durationCustom < durationOS) {
+                    std::cout << ">>> SUCCESS: Custom Allocator is faster by " 
+                              << (durationOS - durationCustom) << " microseconds!\n";
+                } else {
+                    std::cout << ">>> NOTE: OS was faster on this run.\n";
+                }
+                break;
+            }
+            case 6:
                 std::cout << "\nExiting System. Generating Final Summary...\n\n";
                 primaryAlloc->printSummaryTable(globalUnit);
                 break;
