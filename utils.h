@@ -8,6 +8,7 @@ struct AllocationRecord {
     void* firstFitPtr;
     void* bestFitPtr;
     void* worstFitPtr;
+    void* osPtr;
     double requestedValue;
 };
 

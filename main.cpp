@@ -64,6 +64,11 @@ int main() {
 
     std::vector<AllocationRecord> allocatedPointers; 
 
+    long long totalCustomTimeNs = 0;
+    long long totalOSTimeNs = 0;
+    int totalAllocOps = 0;
+    int totalDeallocOps = 0;
+
     int choice = 0;
     while (choice != 6) {
         std::cout << "\n--- Custom Memory Allocator Menu ---\n";
@@ -88,24 +93,63 @@ int main() {
                 std::cin >> val;
 
                 size_t requestedBytes = convertToBytes(val, globalUnit);
+                if (requestedBytes == 0) {
+                    std::cout << "Please enter a value greater than 0.\n";
+                    break;
+                }
                 
+                auto startOS = std::chrono::high_resolution_clock::now();
+                void* ptrOS = ::operator new(requestedBytes);
+                auto endOS = std::chrono::high_resolution_clock::now();
+                long long osAllocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(endOS - startOS).count();
+
+                void* ptrF = nullptr;
+                void* ptrB = nullptr;
+                void* ptrW = nullptr;
+                long long customAllocNs = 0;
+
                 globalAllocator = &allocFirst;
                 globalStrategy = AllocationStrategy::FIRST_FIT;
-                void* ptrF = DataBlock::operator new(requestedBytes);
-                
+                if (stratChoice == 1) {
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    ptrF = DataBlock::operator new(requestedBytes);
+                    auto t2 = std::chrono::high_resolution_clock::now();
+                    customAllocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+                } else {
+                    ptrF = DataBlock::operator new(requestedBytes);
+                }
+
                 globalAllocator = &allocBest;
                 globalStrategy = AllocationStrategy::BEST_FIT;
-                void* ptrB = DataBlock::operator new(requestedBytes);
-                
+                if (stratChoice == 2) {
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    ptrB = DataBlock::operator new(requestedBytes);
+                    auto t2 = std::chrono::high_resolution_clock::now();
+                    customAllocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+                } else {
+                    ptrB = DataBlock::operator new(requestedBytes);
+                }
+
                 globalAllocator = &allocWorst;
                 globalStrategy = AllocationStrategy::WORST_FIT;
-                void* ptrW = DataBlock::operator new(requestedBytes);
-                
+                if (stratChoice == 3) {
+                    auto t1 = std::chrono::high_resolution_clock::now();
+                    ptrW = DataBlock::operator new(requestedBytes);
+                    auto t2 = std::chrono::high_resolution_clock::now();
+                    customAllocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+                } else {
+                    ptrW = DataBlock::operator new(requestedBytes);
+                }
+
                 if (ptrF && ptrB && ptrW) {
-                    allocatedPointers.push_back({ptrF, ptrB, ptrW, val});
+                    allocatedPointers.push_back({ptrF, ptrB, ptrW, ptrOS, val});
+                    totalOSTimeNs += osAllocNs;
+                    totalCustomTimeNs += customAllocNs;
+                    totalAllocOps++;
                     std::cout << "Successfully allocated " << val << " " << globalUnit << ".\n";
                 } else {
                     std::cout << "Allocation failed due to fragmentation.\n";
+                    ::operator delete(ptrOS);
                     if (ptrF) { globalAllocator = &allocFirst; DataBlock::operator delete(ptrF); }
                     if (ptrB) { globalAllocator = &allocBest; DataBlock::operator delete(ptrB); }
                     if (ptrW) { globalAllocator = &allocWorst; DataBlock::operator delete(ptrW); }
@@ -136,15 +180,47 @@ int main() {
                         });
 
                     if (it != allocatedPointers.end()) {
+                        auto startOS = std::chrono::high_resolution_clock::now();
+                        ::operator delete(it->osPtr);
+                        auto endOS = std::chrono::high_resolution_clock::now();
+                        long long osDeallocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(endOS - startOS).count();
+
+                        long long customDeallocNs = 0;
+
                         globalAllocator = &allocFirst;
-                        DataBlock::operator delete(it->firstFitPtr);
-                        
+                        if (stratChoice == 1) {
+                            auto t1 = std::chrono::high_resolution_clock::now();
+                            DataBlock::operator delete(it->firstFitPtr);
+                            auto t2 = std::chrono::high_resolution_clock::now();
+                            customDeallocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+                        } else {
+                            DataBlock::operator delete(it->firstFitPtr);
+                        }
+
                         globalAllocator = &allocBest;
-                        DataBlock::operator delete(it->bestFitPtr);
-                        
+                        if (stratChoice == 2) {
+                            auto t1 = std::chrono::high_resolution_clock::now();
+                            DataBlock::operator delete(it->bestFitPtr);
+                            auto t2 = std::chrono::high_resolution_clock::now();
+                            customDeallocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+                        } else {
+                            DataBlock::operator delete(it->bestFitPtr);
+                        }
+
                         globalAllocator = &allocWorst;
-                        DataBlock::operator delete(it->worstFitPtr);
-                        
+                        if (stratChoice == 3) {
+                            auto t1 = std::chrono::high_resolution_clock::now();
+                            DataBlock::operator delete(it->worstFitPtr);
+                            auto t2 = std::chrono::high_resolution_clock::now();
+                            customDeallocNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+                        } else {
+                            DataBlock::operator delete(it->worstFitPtr);
+                        }
+
+                        totalOSTimeNs += osDeallocNs;
+                        totalCustomTimeNs += customDeallocNs;
+                        totalDeallocOps++;
+
                         allocatedPointers.erase(it);
                         std::cout << "\nBlock " << id << " successfully deallocated.\n";
                     }
@@ -167,54 +243,42 @@ int main() {
                 allocWorst.printMemoryMap(globalUnit);
                 std::cout << "\n========================================================\n";
                 break;
-            case 5: {              // 
-                std::cout << "\n--- STL Benchmarking Suite ---\n";
-                const int NUM_NODES = 10000;
-                std::cout << "Allocating and freeing " << NUM_NODES << " blocks...\n";
+            case 5: {
+                std::cout << "\n--- STL Performance Benchmark ---\n";
+                int totalOps = totalAllocOps + totalDeallocOps;
 
-                auto startOS = std::chrono::high_resolution_clock::now();
-                std::vector<StandardNode*> stdNodes(NUM_NODES);
-                
-                for (int i = 0; i < NUM_NODES; i++) {
-                    stdNodes[i] = new StandardNode();
+                if (totalOps == 0) {
+                    std::cout << "No operations performed yet. Allocate or deallocate memory first.\n";
+                    break;
                 }
-                for (int i = 0; i < NUM_NODES; i++) {
-                    delete stdNodes[i];
-                }
-                
-                auto endOS = std::chrono::high_resolution_clock::now();
-                auto durationOS = std::chrono::duration_cast<std::chrono::microseconds>(endOS - startOS).count();
 
-                globalAllocator = primaryAlloc;
-                globalStrategy = (stratChoice == 1) ? AllocationStrategy::FIRST_FIT : 
-                                 (stratChoice == 2) ? AllocationStrategy::BEST_FIT : AllocationStrategy::WORST_FIT;
-                
-                suppressOutput = true; 
+                double osUs = totalOSTimeNs / 1000.0;
+                double customUs = totalCustomTimeNs / 1000.0;
 
-                auto startCustom = std::chrono::high_resolution_clock::now();
-                std::vector<DataBlock*> customNodes(NUM_NODES);
-                
-                for (int i = 0; i < NUM_NODES; i++) {
-                    customNodes[i] = static_cast<DataBlock*>(DataBlock::operator new(1));
-                }
-                for (int i = 0; i < NUM_NODES; i++) {
-                    DataBlock::operator delete(customNodes[i]);
-                }
-                
-                auto endCustom = std::chrono::high_resolution_clock::now();
-                auto durationCustom = std::chrono::duration_cast<std::chrono::microseconds>(endCustom - startCustom).count();
+                double osMs = totalOSTimeNs / 1000000.0;
+                double customMs = totalCustomTimeNs / 1000000.0;
 
-                suppressOutput = false; 
+                std::cout << "Measured Operations: " << totalOps
+                          << " (" << totalAllocOps << " allocations, "
+                          << totalDeallocOps << " deallocations)\n\n";
 
-                std::cout << "\n[RESULTS]\n";
-                std::cout << "Standard OS (new/delete): " << durationOS << " microseconds\n";
-                std::cout << "Custom Allocator Engine:  " << durationCustom << " microseconds\n\n";
-                
-                if (durationCustom < durationOS) {
-                    std::cout << ">>> SUCCESS: Custom Allocator is faster by " 
-                              << (durationOS - durationCustom) << " microseconds!\n";
+                std::cout << std::fixed << std::setprecision(4);
+                std::cout << "[RESULTS]\n";
+                std::cout << "Standard OS (new/delete): " << osUs << " us (" << osMs << " ms)\n";
+                std::cout << "Custom Allocator Engine:  " << customUs << " us (" << customMs << " ms)\n\n";
+
+                if (totalCustomTimeNs < totalOSTimeNs) {
+                    double diffUs = osUs - customUs;
+                    double diffMs = osMs - customMs;
+                    std::cout << ">>> SUCCESS: Custom Allocator was faster by "
+                              << diffUs << " us (" << diffMs << " ms)!\n";
+                } else if (totalCustomTimeNs == totalOSTimeNs) {
+                    std::cout << ">>> RESULT: Both allocators matched in execution time.\n";
                 } else {
-                    std::cout << ">>> NOTE: OS was faster on this run.\n";
+                    double diffUs = customUs - osUs;
+                    double diffMs = customMs - osMs;
+                    std::cout << ">>> NOTE: OS was faster by "
+                              << diffUs << " us (" << diffMs << " ms) on these operations.\n";
                 }
                 break;
             }
