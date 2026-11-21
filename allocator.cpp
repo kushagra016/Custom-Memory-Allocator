@@ -1,5 +1,5 @@
 #include "allocator.h"
-#include "Utils.h"
+#include "utils.h"
 #include <iostream>
 #include <iomanip>
 
@@ -9,6 +9,7 @@ MemoryAllocator::MemoryAllocator(size_t size, std::string name) {
     memoryPool = ::operator new(totalSize);
     head = static_cast<BlockHeader*>(memoryPool);
 
+    head->uniqueId = 0;
     head->size = totalSize - sizeof(BlockHeader);
     head->requestedSize = 0;
     head->isFree = true;
@@ -22,10 +23,12 @@ MemoryAllocator::~MemoryAllocator() {
     ::operator delete(memoryPool);
 }
 
-void* MemoryAllocator::allocate(size_t size, AllocationStrategy strategy) {
+void* MemoryAllocator::allocate(size_t rawSize, AllocationStrategy strategy, int newId) {
     std::lock_guard<std::mutex> lock(arenaMutex);
 
-    if (size == 0) return nullptr;
+    if (rawSize == 0) return nullptr;
+
+    size_t size = alignToWordBoundary(rawSize);
 
     BlockHeader* current = (strategy == AllocationStrategy::FIRST_FIT) ? firstFreeBlock : head;
     BlockHeader* selectedBlock = nullptr;
@@ -70,6 +73,7 @@ void* MemoryAllocator::allocate(size_t size, AllocationStrategy strategy) {
 
         newBlock->size = selectedBlock->size - size - sizeof(BlockHeader);
         newBlock->requestedSize = 0;
+        newBlock->uniqueId = 0;
         newBlock->isFree = true;
         newBlock->next = selectedBlock->next;
         newBlock->prev = selectedBlock;
@@ -84,6 +88,7 @@ void* MemoryAllocator::allocate(size_t size, AllocationStrategy strategy) {
 
     selectedBlock->isFree = false;
     selectedBlock->requestedSize = size;
+    selectedBlock->uniqueId = newId;
 
     if (selectedBlock == firstFreeBlock) {
         BlockHeader* temp = firstFreeBlock->next;
@@ -104,6 +109,7 @@ void MemoryAllocator::deallocate(void* ptr) {
     BlockHeader* current = static_cast<BlockHeader*>(ptr) - 1;
     current->isFree = true;
     current->requestedSize = 0;
+    current->uniqueId = 0;
 
     if (current->next != nullptr && current->next->isFree) {
         current->size += sizeof(BlockHeader) + current->next->size;
@@ -255,4 +261,58 @@ void MemoryAllocator::printSummaryTable(std::string unit) {
               << std::right << std::setw(17) << externalFragPercent
               << " " << std::left << std::setw(7) << "%" << "|\n";
     std::cout << "+-------------------------------------------------+\n\n";
+}
+
+void* MemoryAllocator::getPointerByUniqueId(int targetId) {
+    std::lock_guard<std::mutex> lock(arenaMutex);
+    BlockHeader* current = head;
+    while (current != nullptr) {
+        if (current->uniqueId == targetId && !current->isFree) {
+            return static_cast<void*>(current + 1);
+        }
+        current = current->next;
+    }
+    return nullptr;
+}
+
+json MemoryAllocator::getMemoryMapJson(const std::string &unit) {
+    std::lock_guard<std::mutex> lock(arenaMutex);
+    BlockHeader *current = head;
+    json mapArray = json::array();
+
+    while (current != nullptr) {
+        json block;
+        block["id"] = current->uniqueId;
+        block["status"] = current->isFree ? "FREE" : "USED";
+        block["sizeBytes"] = current->size;
+        block["displaySize"] = convertFromBytes(current->size, unit);
+        block["unit"] = unit;
+        mapArray.push_back(block);
+        current = current->next;
+    }
+    return mapArray;
+}
+
+json MemoryAllocator::getAnalyticsJson() {
+    std::lock_guard<std::mutex> lock(arenaMutex);
+    BlockHeader *current = head;
+    size_t totalFreeBytes = 0, totalUsedBytes = 0, largestFreeBlock = 0;
+    int blockCount = 0;
+
+    while (current != nullptr) {
+        if (current->isFree) {
+            totalFreeBytes += current->size;
+            if (current->size > largestFreeBlock) largestFreeBlock = current->size;
+        } else {
+            totalUsedBytes += current->size;
+        }
+        blockCount++;
+        current = current->next;
+    }
+
+    double externalFrag = (totalFreeBytes > 0) ? (static_cast<double>(totalFreeBytes - largestFreeBlock) / totalFreeBytes) * 100.0 : 0.0;
+    json stats;
+    stats["externalFrag"] = externalFrag;
+    stats["totalBlocks"] = blockCount;
+    return stats;
 }
