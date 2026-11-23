@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const API_BASE_URL = "https://custom-memory-allocator.onrender.com";
+const API_BASE_URL =
+  window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+    ? "http://localhost:8080"
+    : "https://custom-memory-allocator.onrender.com";
 
 export default function App() {
   const [maps, setMaps] = useState({ firstFit: [], bestFit: [], worstFit: [] });
@@ -25,14 +28,17 @@ export default function App() {
 
   const fetchData = async () => {
     try {
-      const [mapRes, analyticsRes, benchRes] = await Promise.all([
+      const [mapRes, analyticsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/memory-map?unit=${unit}`),
-        fetch(`${API_BASE_URL}/api/analytics`),
-        fetch(`${API_BASE_URL}/api/benchmark`)
+        fetch(`${API_BASE_URL}/api/analytics`)
       ]);
       setMaps(await mapRes.json());
       setAnalytics(await analyticsRes.json());
-      setBenchmark(await benchRes.json());
+
+      fetch(`${API_BASE_URL}/api/benchmark`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => { if (data) setBenchmark(data); })
+        .catch(() => {});
     } catch (error) {
       console.error("Failed to fetch data:", error);
     }

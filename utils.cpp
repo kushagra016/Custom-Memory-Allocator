@@ -13,7 +13,3 @@ double convertFromBytes(size_t bytes, std::string unit) {
     if (unit == "GB") return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
     return static_cast<double>(bytes);
 }
-
-size_t alignToWordBoundary(size_t bytes, size_t alignment) {
-    return (bytes + alignment - 1) & ~(alignment - 1);
-}

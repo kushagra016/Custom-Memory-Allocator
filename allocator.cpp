@@ -23,12 +23,10 @@ MemoryAllocator::~MemoryAllocator() {
     ::operator delete(memoryPool);
 }
 
-void* MemoryAllocator::allocate(size_t rawSize, AllocationStrategy strategy, int newId) {
+void* MemoryAllocator::allocate(size_t size, AllocationStrategy strategy, int newId) {
     std::lock_guard<std::mutex> lock(arenaMutex);
 
-    if (rawSize == 0) return nullptr;
-
-    size_t size = alignToWordBoundary(rawSize);
+    if (size == 0) return nullptr;
 
     BlockHeader* current = (strategy == AllocationStrategy::FIRST_FIT) ? firstFreeBlock : head;
     BlockHeader* selectedBlock = nullptr;
@@ -275,7 +273,7 @@ void* MemoryAllocator::getPointerByUniqueId(int targetId) {
     return nullptr;
 }
 
-json MemoryAllocator::getMemoryMapJson(const std::string &unit) {
+json MemoryAllocator::getMemoryMapJson(const std::string& unit) {
     std::lock_guard<std::mutex> lock(arenaMutex);
     BlockHeader *current = head;
     json mapArray = json::array();

@@ -15,10 +15,8 @@
 
 using json = nlohmann::json;
 
-bool suppressOutput = false;
 MemoryAllocator* globalAllocator = nullptr;
 AllocationStrategy globalStrategy = AllocationStrategy::FIRST_FIT;
-int globalCurrentId = 0;
 
 std::mutex webRoutingMutex;
 int globalAllocationCounter = 1;
@@ -33,11 +31,6 @@ struct DataBlock {
     }
 };
 
-struct StandardNode {  
-    char byte;
-    StandardNode() {}
-    ~StandardNode() {}
-};
 
 int main() {
     std::cout << "Initializing Custom Memory Allocator...\n";
